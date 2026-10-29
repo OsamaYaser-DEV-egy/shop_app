@@ -7,10 +7,3 @@ abstract final class FirestorePaths {
   static const String cart = 'cart';
   static const String favorites = 'favorites';
 }
-
-/// Name of the callable Cloud Function used to place orders (added in Stage 5).
-abstract final class CloudFunctionNames {
-  static const String placeOrder = 'placeOrder';
-  static const String cancelOrder = 'cancelOrder';
-  static const String updateOrderStatus = 'updateOrderStatus';
-}

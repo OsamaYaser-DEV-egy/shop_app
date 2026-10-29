@@ -17,6 +17,16 @@ class QuantityStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Swallows taps on the stepper (including a disabled button), so they
+    // never reach a tappable parent such as the cart line card.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: _buildStepper(),
+    );
+  }
+
+  Widget _buildStepper() {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,

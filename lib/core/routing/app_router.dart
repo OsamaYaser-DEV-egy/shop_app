@@ -42,37 +42,37 @@ abstract final class AppRouter {
         GoRoute(
           path: RoutePaths.splash,
           name: RouteNames.splash,
-          builder: (_, __) => const SplashPage(),
+          builder: (_, _) => const SplashPage(),
         ),
         GoRoute(
           path: RoutePaths.login,
           name: RouteNames.login,
-          builder: (_, __) => const LoginPage(),
+          builder: (_, _) => const LoginPage(),
         ),
         GoRoute(
           path: RoutePaths.register,
           name: RouteNames.register,
-          builder: (_, __) => const RegisterPage(),
+          builder: (_, _) => const RegisterPage(),
         ),
         GoRoute(
           path: RoutePaths.forgotPassword,
           name: RouteNames.forgotPassword,
-          builder: (_, __) => const ForgotPasswordPage(),
+          builder: (_, _) => const ForgotPasswordPage(),
         ),
         GoRoute(
           path: RoutePaths.sessionProblem,
           name: RouteNames.sessionProblem,
-          builder: (_, __) => const SessionProblemPage(),
+          builder: (_, _) => const SessionProblemPage(),
         ),
         GoRoute(
           path: RoutePaths.home,
           name: RouteNames.home,
-          builder: (_, __) => const HomePage(),
+          builder: (_, _) => const HomePage(),
           routes: [
             GoRoute(
               path: 'orders',
               name: RouteNames.myOrders,
-              builder: (_, __) => const MyOrdersPage(),
+              builder: (_, _) => const MyOrdersPage(),
               routes: [
                 GoRoute(
                   path: ':id',
@@ -85,14 +85,14 @@ abstract final class AppRouter {
             GoRoute(
               path: 'notifications',
               name: RouteNames.notifications,
-              builder: (_, __) => const NotificationsPage(),
+              builder: (_, _) => const NotificationsPage(),
             ),
           ],
         ),
         GoRoute(
           path: RoutePaths.checkout,
           name: RouteNames.checkout,
-          builder: (_, __) => const CheckoutPage(),
+          builder: (_, _) => const CheckoutPage(),
         ),
         GoRoute(
           path: RoutePaths.orderSuccess,
@@ -103,7 +103,7 @@ abstract final class AppRouter {
         GoRoute(
           path: RoutePaths.profile,
           name: RouteNames.profile,
-          builder: (_, __) => const ProfilePage(),
+          builder: (_, _) => const ProfilePage(),
         ),
         GoRoute(
           path: RoutePaths.productDetails,
@@ -114,27 +114,27 @@ abstract final class AppRouter {
         GoRoute(
           path: RoutePaths.cart,
           name: RouteNames.cart,
-          builder: (_, __) => const CartPage(),
+          builder: (_, _) => const CartPage(),
         ),
         GoRoute(
           path: RoutePaths.favorites,
           name: RouteNames.favorites,
-          builder: (_, __) => const FavoritesPage(),
+          builder: (_, _) => const FavoritesPage(),
         ),
         GoRoute(
           path: RoutePaths.adminDashboard,
           name: RouteNames.adminDashboard,
-          builder: (_, __) => const AdminDashboardPage(),
+          builder: (_, _) => const AdminDashboardPage(),
         ),
         GoRoute(
           path: RoutePaths.adminProducts,
           name: RouteNames.adminProducts,
-          builder: (_, __) => const AdminProductsPage(),
+          builder: (_, _) => const AdminProductsPage(),
         ),
         GoRoute(
           path: RoutePaths.adminProductNew,
           name: RouteNames.adminProductNew,
-          builder: (_, __) => const ProductFormPage(),
+          builder: (_, _) => const ProductFormPage(),
         ),
         GoRoute(
           path: RoutePaths.adminProductEdit,
@@ -145,7 +145,7 @@ abstract final class AppRouter {
         GoRoute(
           path: RoutePaths.adminOrders,
           name: RouteNames.adminOrders,
-          builder: (_, __) => const AdminOrdersPage(),
+          builder: (_, _) => const AdminOrdersPage(),
         ),
         GoRoute(
           path: RoutePaths.adminOrderDetails,

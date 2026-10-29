@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'app.dart';
 import 'core/di/injection.dart';
+import 'core/errors/global_error_handlers.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'core/notifications/notification_tap.dart';
 import 'core/routing/route_names.dart';
@@ -18,6 +19,7 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  installGlobalErrorHandlers();
 
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);

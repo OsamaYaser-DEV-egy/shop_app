@@ -18,8 +18,8 @@ class ProductImage extends StatelessWidget {
       imageUrl: url,
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 200),
-      placeholder: (_, __) => const _Placeholder(),
-      errorWidget: (_, __, ___) => const _Fallback(),
+      placeholder: (_, _) => const _Placeholder(),
+      errorWidget: (_, _, _) => const _Fallback(),
     );
   }
 }

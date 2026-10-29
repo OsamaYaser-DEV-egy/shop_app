@@ -140,7 +140,7 @@ class _AdminProductsViewState extends State<_AdminProductsView> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
       itemCount: visible.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, index) {
         final product = visible[index];
         return AdminProductTile(

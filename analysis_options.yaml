@@ -15,3 +15,7 @@ linter:
     prefer_const_declarations: true
     avoid_print: true
     always_declare_return_types: true
+    # The project assigns private fields in initializer lists
+    # (`_signIn = signIn`) so constructors keep public parameter names
+    # everywhere; private named parameters would change that convention.
+    prefer_initializing_formals: false

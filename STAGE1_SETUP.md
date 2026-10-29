@@ -146,3 +146,13 @@ How it works:
 - Android 13+ asks for notification permission the first time a customer signs in.
 
 Limits (accepted for v1): no push when the app is closed (Firebase Cloud Messaging would need Cloud Functions or another trusted server); Android may stop the app's connection after some time in the background. Missed updates are still in the notification list and on the order screen.
+
+# Stage 8: final review (Stage 7 in the requirements document)
+
+- Security Rules reviewed: profile `updatedAt` must now be the server time; header rewritten as a map of the collections. `firestore_tests/` covers all collections (62 tests), including role escalation, private profiles and product permissions.
+- `firebase.json` now has the `firestore.rules` target and `.firebaserc` names the default project, so `firebase deploy --only firestore:rules` works from the project folder.
+- Error handling: global handlers for uncaught errors (logged; a friendly message replaces broken widgets in release builds); friendly messages for Firestore quota (`resource-exhausted`), timeouts and transaction conflicts.
+- Removed unused packages and code from the dropped Cloud Functions/FCM plans (`cloud_functions`, `firebase_messaging`, `firebase_storage`, `image_picker`).
+- `flutter analyze` reports no issues (`prefer_initializing_formals` is disabled on purpose, see `analysis_options.yaml`).
+- Widget tests for cart lines, order details and the notification list; error mapping tests. A widget test found and fixed a bug: tapping a disabled quantity button opened the product page.
+- README rewritten: features, setup, data model, security model, notifications, tests and known limitations.

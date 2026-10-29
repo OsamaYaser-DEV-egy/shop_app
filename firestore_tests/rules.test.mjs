@@ -395,6 +395,76 @@ await t('owner cannot edit or delete a notification', async () => {
   await assertFails(deleteDoc(doc(alice(), `notifications/${note.id}`)));
 });
 
+// ---- Profiles and roles (users/{uid}) ----
+
+const newProfile = (overrides = {}) => ({
+  name: 'Alice', email: 'alice@example.com', phone: '', address: '',
+  role: 'customer', createdAt: serverTimestamp(), ...overrides,
+});
+
+console.log('Profiles and roles');
+await t('a new user can create their own customer profile', async () => {
+  await env.clearFirestore();
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice'), newProfile()));
+});
+await t('nobody can register as an admin', async () => {
+  await env.clearFirestore();
+  await assertFails(setDoc(doc(alice(), 'users/alice'), newProfile({ role: 'admin' })));
+});
+await t('profile email must match the signed-in account', async () => {
+  await env.clearFirestore();
+  await assertFails(setDoc(doc(alice(), 'users/alice'), newProfile({ email: 'boss@example.com' })));
+});
+await t("cannot create someone else's profile or add fields", async () => {
+  await env.clearFirestore();
+  await assertFails(setDoc(doc(alice(), 'users/bob'), newProfile()));
+  await assertFails(setDoc(doc(alice(), 'users/alice'), newProfile({ isVip: true })));
+});
+await t('customers cannot make themselves admin later', async () => {
+  await seed({});
+  await assertFails(updateDoc(doc(alice(), 'users/alice'), { role: 'admin' }));
+});
+await t('customers can edit name, phone and address only', async () => {
+  await seed({});
+  const db = alice();
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    name: 'Alice B', phone: '0100000000', address: '12 Main Street', updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { email: 'new@example.com' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { name: 'A' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { updatedAt: new Date(2000, 0, 1) }));
+});
+await t('profiles are private; admins can read them; nobody deletes them', async () => {
+  await seed({});
+  await assertFails(getDoc(doc(bob(), 'users/alice')));
+  await assertSucceeds(getDoc(doc(alice(), 'users/alice')));
+  await assertSucceeds(getDoc(doc(admin(), 'users/alice')));
+  await assertFails(deleteDoc(doc(alice(), 'users/alice')));
+});
+
+console.log('Product permissions');
+await t('signed-out visitors cannot read anything', async () => {
+  await seed({ a: product('Amp', 20, 5) });
+  const guest = env.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(guest, 'products/a')));
+  await assertFails(getDocs(collection(guest, 'orders')));
+});
+await t('customers cannot create, edit or delete products', async () => {
+  await seed({ a: product('Amp', 20, 5) });
+  const db = alice();
+  await assertFails(setDoc(doc(db, 'products/b'), product('Free', 1, 100)));
+  await assertFails(updateDoc(doc(db, 'products/a'), { stock: 999 }));
+  await assertFails(deleteDoc(doc(db, 'products/a')));
+});
+await t('admins create valid products only', async () => {
+  await seed({});
+  const db = admin();
+  await assertSucceeds(setDoc(doc(db, 'products/ok'), product('Lamp', 15, 3)));
+  await assertFails(setDoc(doc(db, 'products/bad'), product('Lamp', 0, 3)));
+  await assertFails(setDoc(doc(db, 'products/bad2'), product('Lamp', 15, -1)));
+  await assertSucceeds(deleteDoc(doc(db, 'products/ok')));
+});
+
 await env.cleanup();
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

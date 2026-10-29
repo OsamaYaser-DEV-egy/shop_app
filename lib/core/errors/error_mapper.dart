@@ -1,5 +1,5 @@
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'failures.dart';
@@ -10,8 +10,10 @@ abstract final class ErrorMapper {
   static Failure map(Object error) {
     if (error is Failure) return error;
     if (error is FirebaseAuthException) return _auth(error);
-    if (error is FirebaseFunctionsException) return _functions(error);
     if (error is FirebaseException) return _firestore(error);
+    if (error is TimeoutException) {
+      return const Failure('The connection timed out. Please try again.', code: 'network');
+    }
     return const Failure('Something went wrong. Please try again.');
   }
 
@@ -54,32 +56,14 @@ abstract final class ErrorMapper {
       case 'aborted':
         // A transaction kept conflicting, e.g. many orders for one product.
         return const Failure('The store is busy. Please try again.', code: 'aborted');
-      default:
-        return const Failure('Something went wrong. Please try again.');
-    }
-  }
-
-  /// Cloud Functions throw [FirebaseFunctionsException]. Messages from OUR
-  /// functions (HttpsError with a safe message) are shown; anything else is
-  /// replaced with a generic message.
-  static Failure _functions(FirebaseFunctionsException e) {
-    switch (e.code) {
-      case 'unauthenticated':
-        return const Failure('Please sign in to continue.', code: 'unauthenticated');
-      case 'permission-denied':
-        return const Failure('You do not have permission to do that.', code: 'permission-denied');
-      case 'failed-precondition':
-      case 'invalid-argument':
-      case 'not-found':
-      case 'already-exists':
-        final msg = e.message;
-        if (msg != null && msg.isNotEmpty) {
-          return Failure(msg, code: e.code);
-        }
-        return Failure('The request could not be completed.', code: e.code);
-      case 'unavailable':
       case 'deadline-exceeded':
-        return const Failure('Server is unreachable. Please try again.', code: 'network');
+        return const Failure('The connection timed out. Please try again.', code: 'network');
+      case 'resource-exhausted':
+        // The free Spark plan's daily Firestore quota was used up.
+        return const Failure(
+          'The store has reached its usage limit for today. Please try again later.',
+          code: 'quota-exceeded',
+        );
       default:
         return const Failure('Something went wrong. Please try again.');
     }
