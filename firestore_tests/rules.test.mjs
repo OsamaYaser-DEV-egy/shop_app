@@ -335,6 +335,66 @@ await t('admin can still edit a restocked product', async () => {
   await assertSucceeds(updateDoc(doc(admin(), 'products/a'), { price: 30, updatedAt: serverTimestamp() }));
 });
 
+// ---- Notifications (written with the store's status change) ----
+
+/// Status change plus its notification in one transaction, like the app.
+function setStatusAndNotify(db, id, status, overrides = {}) {
+  return runTransaction(db, async (tx) => {
+    const order = (await tx.get(doc(db, `orders/${id}`))).data();
+    tx.update(doc(db, `orders/${id}`), { status, updatedAt: serverTimestamp() });
+    tx.set(doc(collection(db, 'notifications')), {
+      userId: order.userId, orderId: id, status,
+      title: 'Order confirmed', body: 'Your order has been confirmed.',
+      isRead: false, createdAt: serverTimestamp(), ...overrides,
+    });
+  });
+}
+
+const notificationsOf = async (db, uid) =>
+  getDocs(query(collection(db, 'notifications'), where('userId', '==', uid)));
+
+console.log('Notifications');
+await t('admin status change writes the customer notification', async () => {
+  const id = await seedOrder();
+  await assertSucceeds(setStatusAndNotify(admin(), id, 'confirmed'));
+  const list = await notificationsOf(alice(), 'alice');
+  if (list.size !== 1) throw new Error(`expected 1 notification, got ${list.size}`);
+});
+await t('notification for the wrong customer is denied', async () => {
+  const id = await seedOrder();
+  await assertFails(setStatusAndNotify(admin(), id, 'confirmed', { userId: 'bob' }));
+});
+await t('notification that does not match the new status is denied', async () => {
+  const id = await seedOrder();
+  await assertFails(setStatusAndNotify(admin(), id, 'confirmed', { status: 'delivered' }));
+});
+await t('notification for a non-notifying status is denied', async () => {
+  const id = await seedOrder('confirmed');
+  await assertFails(setStatusAndNotify(admin(), id, 'preparing'));
+});
+await t('customers cannot create notifications', async () => {
+  const id = await seedOrder();
+  await assertFails(setDoc(doc(collection(alice(), 'notifications')), {
+    userId: 'alice', orderId: id, status: 'pending', title: 'Hi', body: '',
+    isRead: false, createdAt: serverTimestamp(),
+  }));
+});
+await t('owner reads and marks read; others cannot read', async () => {
+  const id = await seedOrder();
+  await setStatusAndNotify(admin(), id, 'confirmed');
+  const note = (await notificationsOf(alice(), 'alice')).docs[0];
+  await assertFails(getDoc(doc(bob(), `notifications/${note.id}`)));
+  await assertFails(notificationsOf(bob(), 'alice'));
+  await assertSucceeds(updateDoc(doc(alice(), `notifications/${note.id}`), { isRead: true }));
+});
+await t('owner cannot edit or delete a notification', async () => {
+  const id = await seedOrder();
+  await setStatusAndNotify(admin(), id, 'confirmed');
+  const note = (await notificationsOf(alice(), 'alice')).docs[0];
+  await assertFails(updateDoc(doc(alice(), `notifications/${note.id}`), { title: 'Free stuff' }));
+  await assertFails(deleteDoc(doc(alice(), `notifications/${note.id}`)));
+});
+
 await env.cleanup();
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

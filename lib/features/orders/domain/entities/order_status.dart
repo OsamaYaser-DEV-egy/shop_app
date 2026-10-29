@@ -34,6 +34,13 @@ enum OrderStatus {
 
   bool get isFinal => this == delivered || this == cancelled;
 
+  /// Statuses the store's change notifies the customer about.
+  bool get notifiesCustomer =>
+      this == confirmed ||
+      this == shipped ||
+      this == delivered ||
+      this == cancelled;
+
   static OrderStatus? fromName(Object? value) {
     for (final status in values) {
       if (status.name == value) return status;

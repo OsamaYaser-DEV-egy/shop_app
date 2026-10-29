@@ -9,6 +9,7 @@ import '../../../../core/widgets/empty_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../cart/presentation/widgets/cart_icon_button.dart';
+import '../../../notifications/presentation/widgets/notification_bell.dart';
 import '../cubit/product_list_cubit.dart';
 import '../cubit/product_list_state.dart';
 import '../widgets/category_chips.dart';
@@ -67,6 +68,7 @@ class _HomeViewState extends State<_HomeView> {
             icon: const Icon(Icons.receipt_long_outlined),
             onPressed: () => context.pushNamed(RouteNames.myOrders),
           ),
+          const NotificationBell(),
           IconButton(
             tooltip: 'Profile',
             icon: const Icon(Icons.person_outline),

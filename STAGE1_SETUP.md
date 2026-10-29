@@ -129,3 +129,20 @@ Business rules, enforced by `firestore.rules` and mirrored in `OrderStatus`:
 - Cancelling returns each item's quantity to stock in the same transaction. The rules allow a product's stock to rise only by the cancelled quantity, once, and only while that order turns cancelled (`lastRestockOrderId` links the two). Items whose product was deleted are skipped.
 
 The rules tests in `firestore_tests/` cover these cases (`npm test`).
+
+# Stage 7 setup (notifications; Stage 6 in the requirements document)
+
+The project stays on the free Spark plan with no server, so notifications are **in-app and local**: they appear while the app is running (open or in the background), not when it is closed. Deploy the updated rules:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+How it works:
+- When the admin confirms, ships, delivers or cancels an order, the same Firestore transaction writes `notifications/{id}`: `{ userId, orderId, status, title, body, isRead, createdAt }`. The rules check that it matches the order (customer, new status) and that only admins create it.
+- The customer's app watches its notifications. New ones are shown as Android notifications (channel "Order updates"); older ones only appear in the list. The bell on Home shows the unread count and opens the notification list.
+- Tapping a notification (system tray or list) marks it read and opens the order. If the tap starts the app, the order opens once the customer is signed in.
+- Customers can only read their own notifications and mark them read. Notifications are never deleted.
+- Android 13+ asks for notification permission the first time a customer signs in.
+
+Limits (accepted for v1): no push when the app is closed (Firebase Cloud Messaging would need Cloud Functions or another trusted server); Android may stop the app's connection after some time in the background. Missed updates are still in the notification list and on the order screen.

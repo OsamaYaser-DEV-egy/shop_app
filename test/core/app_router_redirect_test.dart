@@ -57,6 +57,7 @@ void main() {
         RoutePaths.favorites,
         RoutePaths.checkout,
         RoutePaths.myOrders,
+        RoutePaths.notifications,
         '/home/orders/abc',
         '/order-success/abc',
       ]) {

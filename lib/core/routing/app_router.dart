@@ -15,6 +15,7 @@ import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/session_problem_page.dart';
 import '../../features/cart/presentation/pages/cart_page.dart';
 import '../../features/favorites/presentation/pages/favorites_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/orders/presentation/pages/checkout_page.dart';
 import '../../features/orders/presentation/pages/my_orders_page.dart';
 import '../../features/orders/presentation/pages/order_details_page.dart';
@@ -80,6 +81,11 @@ abstract final class AppRouter {
                       OrderDetailsPage(orderId: state.pathParameters['id']!),
                 ),
               ],
+            ),
+            GoRoute(
+              path: 'notifications',
+              name: RouteNames.notifications,
+              builder: (_, __) => const NotificationsPage(),
             ),
           ],
         ),

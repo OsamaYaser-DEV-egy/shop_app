@@ -33,8 +33,10 @@ class Order extends Equatable {
   final DateTime? createdAt;
 
   /// Short, readable reference shown to customers, e.g. `#A1B2C3D4`.
-  String get reference =>
-      '#${(id.length > 8 ? id.substring(0, 8) : id).toUpperCase()}';
+  String get reference => referenceOf(id);
+
+  static String referenceOf(String orderId) =>
+      '#${(orderId.length > 8 ? orderId.substring(0, 8) : orderId).toUpperCase()}';
 
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 

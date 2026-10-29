@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../notifications/data/models/notification_model.dart';
 import '../../../products/data/models/product_model.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/order_request.dart';
@@ -135,7 +136,27 @@ class OrderRemoteDataSource {
       final current = OrderStatus.fromName(snapshot.data()?['status']);
       if (current != from) throw _changedElsewhere;
       tx.update(ref, OrderModel.statusMap(to));
+      _notifyCustomer(tx, orderId, snapshot.data()?['userId'], to);
     });
+  }
+
+  /// Writes the customer's in-app notification in the same transaction as
+  /// the status change, so one never happens without the other. The
+  /// customer's app shows it as a local notification while it is running.
+  void _notifyCustomer(
+    Transaction tx,
+    String orderId,
+    Object? userId,
+    OrderStatus status,
+  ) {
+    if (userId is! String) return;
+    final notification = NotificationModel.forOrderStatus(
+      userId: userId,
+      orderId: orderId,
+      status: status,
+    );
+    if (notification == null) return;
+    tx.set(_firestore.collection(FirestorePaths.notifications).doc(), notification);
   }
 
   /// Marks the order cancelled and returns every item to stock, in one
@@ -161,6 +182,10 @@ class OrderRemoteDataSource {
       }
 
       tx.update(ref, OrderModel.statusMap(OrderStatus.cancelled));
+      // Customers cancel their own orders, so only the store's notifies.
+      if (byStore) {
+        _notifyCustomer(tx, orderId, order.userId, OrderStatus.cancelled);
+      }
       for (var i = 0; i < order.items.length; i++) {
         final stock = products[i].data()?['stock'];
         if (!products[i].exists || stock is! num) continue;

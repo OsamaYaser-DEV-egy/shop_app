@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,6 +30,12 @@ import '../../features/favorites/domain/repositories/favorites_repository.dart';
 import '../../features/favorites/domain/usecases/set_favorite.dart';
 import '../../features/favorites/domain/usecases/watch_favorites.dart';
 import '../../features/favorites/presentation/cubit/favorites_cubit.dart';
+import '../../features/notifications/data/datasources/notification_remote_data_source.dart';
+import '../../features/notifications/data/repositories/notification_repository_impl.dart';
+import '../../features/notifications/domain/repositories/notification_repository.dart';
+import '../../features/notifications/domain/usecases/mark_notifications_read.dart';
+import '../../features/notifications/domain/usecases/watch_notifications.dart';
+import '../../features/notifications/presentation/cubit/notifications_cubit.dart';
 import '../../features/orders/data/datasources/order_remote_data_source.dart';
 import '../../features/orders/data/repositories/order_repository_impl.dart';
 import '../../features/orders/domain/repositories/order_repository.dart';
@@ -60,6 +67,7 @@ import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/domain/usecases/update_profile.dart';
 import '../../features/profile/domain/usecases/watch_profile.dart';
 import '../../features/profile/presentation/cubit/profile_cubit.dart';
+import '../notifications/local_notification_service.dart';
 import '../routing/app_router.dart';
 
 final GetIt sl = GetIt.instance;
@@ -74,6 +82,7 @@ Future<void> configureDependencies() async {
   _registerCart();
   _registerFavorites();
   _registerOrders();
+  _registerNotifications();
   _registerRouter();
 }
 
@@ -273,6 +282,34 @@ void _registerOrders() {
   );
   sl.registerFactory<AdminOrdersCubit>(
     () => AdminOrdersCubit(watchAllOrders: sl<WatchAllOrders>()),
+  );
+}
+
+void _registerNotifications() {
+  sl.registerLazySingleton<LocalNotificationService>(
+    () => LocalNotificationService(FlutterLocalNotificationsPlugin()),
+  );
+  sl.registerLazySingleton<NotificationRemoteDataSource>(
+    () => NotificationRemoteDataSource(sl<FirebaseFirestore>()),
+  );
+  sl.registerLazySingleton<NotificationRepository>(
+    () => NotificationRepositoryImpl(sl<NotificationRemoteDataSource>()),
+  );
+  sl.registerLazySingleton<WatchNotifications>(
+    () => WatchNotifications(sl<NotificationRepository>()),
+  );
+  sl.registerLazySingleton<MarkNotificationsRead>(
+    () => MarkNotificationsRead(sl<NotificationRepository>()),
+  );
+
+  // App-lifetime cubit: bound to the signed-in customer in main.dart. New
+  // notifications are shown on the device while the app runs.
+  sl.registerLazySingleton<NotificationsCubit>(
+    () => NotificationsCubit(
+      watchNotifications: sl<WatchNotifications>(),
+      markNotificationsRead: sl<MarkNotificationsRead>(),
+      onNewNotification: sl<LocalNotificationService>().show,
+    ),
   );
 }
 

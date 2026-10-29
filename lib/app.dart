@@ -10,6 +10,7 @@ import 'features/auth/presentation/cubit/auth_form_state.dart';
 import 'features/auth/presentation/cubit/session_cubit.dart';
 import 'features/cart/presentation/cubit/cart_cubit.dart';
 import 'features/favorites/presentation/cubit/favorites_cubit.dart';
+import 'features/notifications/presentation/cubit/notifications_cubit.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -22,6 +23,7 @@ class App extends StatelessWidget {
         BlocProvider<AuthFormCubit>.value(value: sl<AuthFormCubit>()),
         BlocProvider<CartCubit>.value(value: sl<CartCubit>()),
         BlocProvider<FavoritesCubit>.value(value: sl<FavoritesCubit>()),
+        BlocProvider<NotificationsCubit>.value(value: sl<NotificationsCubit>()),
       ],
       // Auth feedback is shown globally because login/register pages are
       // replaced by the router as soon as the session changes.

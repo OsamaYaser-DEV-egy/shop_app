@@ -6,6 +6,7 @@ rules_version = '2';
 //   Stage 4: users/{uid}/cart and users/{uid}/favorites
 //   Stage 5: orders (created by the app in a transaction, checked here)
 //   Stage 6: order status changes and cancellations (with stock restore)
+//   Stage 7: notifications (in-app, written with each store status change)
 // Everything not matched below is denied by default. The final file is
 // reviewed in the last stage.
 service cloud.firestore {
@@ -289,6 +290,40 @@ service cloud.firestore {
         && (isCustomerCancel(resource.data, request.resource.data)
             || (isAdmin()
                 && isStoreStatusChange(resource.data, request.resource.data)));
+      allow delete: if false;
+    }
+
+    // Written by the admin's app in the same transaction as the status
+    // change it describes, so it must match the order as it will be.
+    function validOrderNotification(d) {
+      let order =
+        getAfter(/databases/$(database)/documents/orders/$(d.orderId)).data;
+      return d.keys().hasOnly(['userId', 'orderId', 'status', 'title', 'body',
+                               'isRead', 'createdAt'])
+        && d.keys().hasAll(['userId', 'orderId', 'status', 'title', 'body',
+                            'isRead', 'createdAt'])
+        && d.orderId is string
+        && d.status in ['confirmed', 'shipped', 'delivered', 'cancelled']
+        && d.status == order.status
+        && d.userId == order.userId
+        && d.title is string && d.title.size() >= 1 && d.title.size() <= 100
+        && validText(d.body, 300)
+        && d.isRead == false
+        && d.createdAt == request.time;
+    }
+
+    // In-app notifications. The customer's app shows new ones as local
+    // notifications while it runs (no push server on the Spark plan).
+    // Customers read their own and can only mark them read.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() && validOrderNotification(request.resource.data);
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['isRead'])
+        && request.resource.data.isRead == true;
       allow delete: if false;
     }
   }

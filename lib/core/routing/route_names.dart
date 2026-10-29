@@ -14,6 +14,7 @@ abstract final class RouteNames {
   static const String orderSuccess = 'order-success';
   static const String myOrders = 'my-orders';
   static const String orderDetails = 'order-details';
+  static const String notifications = 'notifications';
   static const String adminDashboard = 'admin-dashboard';
   static const String adminProducts = 'admin-products';
   static const String adminProductNew = 'admin-product-new';
@@ -40,6 +41,7 @@ abstract final class RoutePaths {
   /// page or, later, a notification) still has Home and My orders behind it.
   static const String myOrders = '/home/orders';
   static const String orderDetails = '/home/orders/:id';
+  static const String notifications = '/home/notifications';
 
   /// Everything under this prefix is admin-only (see AppRouter.redirect).
   static const String adminDashboard = '/admin';
