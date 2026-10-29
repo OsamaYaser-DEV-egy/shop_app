@@ -91,6 +91,14 @@ abstract final class OrderModel {
     };
   }
 
+  /// The only fields a status change may touch (see `firestore.rules`).
+  static Map<String, dynamic> statusMap(OrderStatus status) {
+    return {
+      'status': status.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+
   /// Rounds to cents. The rules accept a total within one cent of their own
   /// sum, which absorbs floating-point differences.
   static double roundMoney(double value) => (value * 100).roundToDouble() / 100;

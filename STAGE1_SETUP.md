@@ -111,3 +111,21 @@ npm test
 ```
 
 On Windows, if the emulator fails with "Unable to establish loopback connection", the temp path is too long for Java; set `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\tmp` (any short existing folder) and run again.
+
+# Stage 6 setup (admin orders; Stage 5 in the requirements document)
+
+No new packages. Deploy the updated rules:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Admin: Dashboard > Orders lists all orders (newest 200) with a status filter. Opening one shows the customer, items, delivery details and the allowed actions.
+
+Business rules, enforced by `firestore.rules` and mirrored in `OrderStatus`:
+- The store moves an order forward one step at a time: pending → confirmed → preparing → shipped → delivered.
+- The store can cancel an order until it ships. A customer can cancel their own order while it is pending (Order details > Cancel order).
+- A status change may touch only `status` and `updatedAt`. Orders are never deleted.
+- Cancelling returns each item's quantity to stock in the same transaction. The rules allow a product's stock to rise only by the cancelled quantity, once, and only while that order turns cancelled (`lastRestockOrderId` links the two). Items whose product was deleted are skipped.
+
+The rules tests in `firestore_tests/` cover these cases (`npm test`).

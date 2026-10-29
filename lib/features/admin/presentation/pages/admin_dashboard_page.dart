@@ -7,7 +7,7 @@ import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/cubit/session_cubit.dart';
 import '../widgets/dashboard_tile.dart';
 
-/// Admin landing page. Order management is added in Stage 6.
+/// Admin landing page: products and orders.
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
 
@@ -52,6 +52,13 @@ class AdminDashboardPage extends StatelessWidget {
               title: 'Products',
               subtitle: 'Create, edit and delete products',
               onTap: () => context.pushNamed(RouteNames.adminProducts),
+            ),
+            const SizedBox(height: 12),
+            DashboardTile(
+              icon: Icons.receipt_long_outlined,
+              title: 'Orders',
+              subtitle: 'Review orders and update their status',
+              onTap: () => context.pushNamed(RouteNames.adminOrders),
             ),
           ],
         ),

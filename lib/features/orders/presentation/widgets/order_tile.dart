@@ -6,10 +6,18 @@ import '../../domain/entities/order.dart';
 import 'order_status_chip.dart';
 
 class OrderTile extends StatelessWidget {
-  const OrderTile({super.key, required this.order, required this.onTap});
+  const OrderTile({
+    super.key,
+    required this.order,
+    required this.onTap,
+    this.showCustomer = false,
+  });
 
   final Order order;
   final VoidCallback onTap;
+
+  /// Admin list: shows who placed the order.
+  final bool showCustomer;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +40,17 @@ class OrderTile extends StatelessWidget {
                       'Order ${order.reference}',
                       style: textTheme.titleMedium,
                     ),
+                    if (showCustomer) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        order.customerName.isEmpty
+                            ? order.customerEmail
+                            : order.customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium,
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       createdAt == null

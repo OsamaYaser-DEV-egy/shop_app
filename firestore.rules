@@ -5,6 +5,7 @@ rules_version = '2';
 //   Stage 3: products
 //   Stage 4: users/{uid}/cart and users/{uid}/favorites
 //   Stage 5: orders (created by the app in a transaction, checked here)
+//   Stage 6: order status changes and cancellations (with stock restore)
 // Everything not matched below is denied by default. The final file is
 // reviewed in the last stage.
 service cloud.firestore {
@@ -67,7 +68,7 @@ service cloud.firestore {
       return d.keys().hasOnly(
                ['name', 'description', 'price', 'imageUrl', 'category',
                 'stock', 'isAvailable', 'isFeatured', 'createdAt', 'updatedAt',
-                'lastOrderId'])
+                'lastOrderId', 'lastRestockOrderId'])
         && d.keys().hasAll(
                ['name', 'description', 'price', 'imageUrl', 'category',
                 'stock', 'isAvailable'])
@@ -80,7 +81,8 @@ service cloud.firestore {
         && d.stock is int && d.stock >= 0 && d.stock <= 100000
         && d.isAvailable is bool
         && (!('isFeatured' in d) || d.isFeatured is bool)
-        && (!('lastOrderId' in d) || d.lastOrderId is string);
+        && (!('lastOrderId' in d) || d.lastOrderId is string)
+        && (!('lastRestockOrderId' in d) || d.lastRestockOrderId is string);
     }
 
     // Placing an order may lower a product's stock by exactly the quantity
@@ -107,14 +109,39 @@ service cloud.firestore {
         && order.items[productId].quantity == quantity;
     }
 
+    // Cancelling an order may raise a product's stock by exactly the quantity
+    // that order held, once: the order must turn cancelled in this same
+    // request, and an order can only be cancelled once.
+    function isStockRestock(productId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isSignedIn()
+        && after.diff(before).affectedKeys()
+             .hasOnly(['stock', 'lastRestockOrderId'])
+        && after.lastRestockOrderId is string
+        && after.stock is int
+        && restockedByCancel(after.lastRestockOrderId, productId,
+                             after.stock - before.stock);
+    }
+
+    function restockedByCancel(orderId, productId, quantity) {
+      let path = /databases/$(database)/documents/orders/$(orderId);
+      let order = getAfter(path).data;
+      return order.status == 'cancelled'
+        && get(path).data.status != 'cancelled'
+        && order.items[productId].quantity == quantity
+        && (order.userId == request.auth.uid || isAdmin());
+    }
+
     // Any signed-in user can browse. Only admins edit products; customers can
-    // only reserve stock while placing an order (no Cloud Functions on the
-    // Spark plan). The reservation is checked first so customers never pay
-    // for the admin lookup.
+    // only reserve stock while placing an order and return it when cancelling
+    // (no Cloud Functions on the Spark plan). Those checks come first so
+    // customers never pay for the admin lookup.
     match /products/{productId} {
       allow read: if isSignedIn();
       allow create: if isAdmin() && validProduct(request.resource.data);
       allow update: if isStockReservation(productId)
+        || isStockRestock(productId)
         || (isAdmin() && validProduct(request.resource.data));
       allow delete: if isAdmin();
     }
@@ -220,14 +247,49 @@ service cloud.firestore {
         && math.abs(d.totalPrice - itemsTotal(d.items, keys)) < 0.01;
     }
 
+    // A status change touches only status and updatedAt.
+    function isStatusChange(before, after, newStatus) {
+      return after.diff(before).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && after.status == newStatus
+        && after.updatedAt == request.time;
+    }
+
+    function nextStatus(status) {
+      return status == 'pending' ? 'confirmed'
+        : status == 'confirmed' ? 'preparing'
+        : status == 'preparing' ? 'shipped'
+        : status == 'shipped' ? 'delivered'
+        : 'none';
+    }
+
+    // Business rules (also in OrderStatus in the app):
+    // - customers may cancel their own order while it is pending;
+    // - the store moves orders forward one step at a time, and may cancel
+    //   them until they ship.
+    function isCustomerCancel(before, after) {
+      return before.userId == request.auth.uid
+        && before.status == 'pending'
+        && isStatusChange(before, after, 'cancelled');
+    }
+
+    function isStoreStatusChange(before, after) {
+      return isStatusChange(before, after, nextStatus(before.status))
+        || (before.status in ['pending', 'confirmed', 'preparing']
+            && isStatusChange(before, after, 'cancelled'));
+    }
+
     // Customers read only their own orders. Orders are created pending by
-    // their owner and are immutable for now; status changes and
-    // cancellations come with the admin order stage.
+    // their owner; afterwards only the status changes, under the rules above.
+    // Orders are never deleted.
     match /orders/{orderId} {
       allow read: if isSignedIn()
         && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && validNewOrder(orderId, request.resource.data);
-      allow update, delete: if false;
+      allow update: if isSignedIn()
+        && (isCustomerCancel(resource.data, request.resource.data)
+            || (isAdmin()
+                && isStoreStatusChange(resource.data, request.resource.data)));
+      allow delete: if false;
     }
   }
 }

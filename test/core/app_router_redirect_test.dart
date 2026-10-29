@@ -114,6 +114,16 @@ void main() {
         expect(AppRouter.redirect(customer, details), isNull);
 
         expect(AppRouter.redirect(admin, RoutePaths.adminProducts), isNull);
+        expect(AppRouter.redirect(admin, RoutePaths.adminOrders), isNull);
+        expect(AppRouter.redirect(admin, '/admin/orders/abc'), isNull);
+        expect(
+          AppRouter.redirect(customer, RoutePaths.adminOrders),
+          RoutePaths.home,
+        );
+        expect(
+          AppRouter.redirect(customer, '/admin/orders/abc'),
+          RoutePaths.home,
+        );
         expect(AppRouter.redirect(admin, adminEdit), isNull);
         expect(AppRouter.redirect(admin, details), RoutePaths.adminDashboard);
 

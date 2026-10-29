@@ -32,11 +32,16 @@ import '../../features/favorites/presentation/cubit/favorites_cubit.dart';
 import '../../features/orders/data/datasources/order_remote_data_source.dart';
 import '../../features/orders/data/repositories/order_repository_impl.dart';
 import '../../features/orders/domain/repositories/order_repository.dart';
+import '../../features/orders/domain/usecases/cancel_order.dart';
 import '../../features/orders/domain/usecases/place_order.dart';
+import '../../features/orders/domain/usecases/update_order_status.dart';
+import '../../features/orders/domain/usecases/watch_all_orders.dart';
 import '../../features/orders/domain/usecases/watch_my_orders.dart';
 import '../../features/orders/domain/usecases/watch_order.dart';
+import '../../features/orders/presentation/cubit/admin_orders_cubit.dart';
 import '../../features/orders/presentation/cubit/checkout_cubit.dart';
 import '../../features/orders/presentation/cubit/my_orders_cubit.dart';
+import '../../features/orders/presentation/cubit/order_actions_cubit.dart';
 import '../../features/orders/presentation/cubit/order_details_cubit.dart';
 import '../../features/products/data/datasources/product_remote_data_source.dart';
 import '../../features/products/data/repositories/product_repository_impl.dart';
@@ -239,6 +244,15 @@ void _registerOrders() {
     () => WatchMyOrders(sl<OrderRepository>()),
   );
   sl.registerLazySingleton<WatchOrder>(() => WatchOrder(sl<OrderRepository>()));
+  sl.registerLazySingleton<WatchAllOrders>(
+    () => WatchAllOrders(sl<OrderRepository>()),
+  );
+  sl.registerLazySingleton<UpdateOrderStatus>(
+    () => UpdateOrderStatus(sl<OrderRepository>()),
+  );
+  sl.registerLazySingleton<CancelOrder>(
+    () => CancelOrder(sl<OrderRepository>()),
+  );
 
   // Page-scoped cubits: a new instance per page, closed by BlocProvider.
   sl.registerFactory<CheckoutCubit>(
@@ -250,6 +264,15 @@ void _registerOrders() {
   sl.registerFactoryParam<OrderDetailsCubit, String, void>(
     (orderId, _) =>
         OrderDetailsCubit(watchOrder: sl<WatchOrder>(), orderId: orderId),
+  );
+  sl.registerFactory<OrderActionsCubit>(
+    () => OrderActionsCubit(
+      updateOrderStatus: sl<UpdateOrderStatus>(),
+      cancelOrder: sl<CancelOrder>(),
+    ),
+  );
+  sl.registerFactory<AdminOrdersCubit>(
+    () => AdminOrdersCubit(watchAllOrders: sl<WatchAllOrders>()),
   );
 }
 

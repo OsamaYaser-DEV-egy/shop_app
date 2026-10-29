@@ -6,6 +6,7 @@ import '../../../../core/errors/failures.dart';
 import '../../../products/data/models/product_model.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/order_request.dart';
+import '../../domain/entities/order_status.dart';
 import '../models/order_model.dart';
 
 /// Orders are written by the app in a transaction (no Cloud Functions on the
@@ -107,6 +108,75 @@ class OrderRemoteDataSource {
       return orders;
     });
   }
+
+  /// The newest [limit] orders. A single-field order needs no composite
+  /// index.
+  Stream<List<Order>> watchAllOrders({int limit = 200}) {
+    return _orders
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => OrderModel.tryFromMap(doc.id, doc.data()))
+              .whereType<Order>()
+              .toList(),
+        );
+  }
+
+  Future<void> updateStatus(
+    String orderId,
+    OrderStatus from,
+    OrderStatus to,
+  ) async {
+    final ref = _orders.doc(orderId);
+    await _firestore.runTransaction<void>((tx) async {
+      final snapshot = await tx.get(ref);
+      final current = OrderStatus.fromName(snapshot.data()?['status']);
+      if (current != from) throw _changedElsewhere;
+      tx.update(ref, OrderModel.statusMap(to));
+    });
+  }
+
+  /// Marks the order cancelled and returns every item to stock, in one
+  /// transaction. Products that were deleted since are skipped. The rules
+  /// allow each product's stock to rise by exactly the cancelled quantity.
+  Future<void> cancelOrder(String orderId, {required bool byStore}) async {
+    final ref = _orders.doc(orderId);
+    await _firestore.runTransaction<void>((tx) async {
+      final snapshot = await tx.get(ref);
+      final data = snapshot.data();
+      final order = data == null ? null : OrderModel.tryFromMap(orderId, data);
+      if (order == null) {
+        throw const Failure('This order no longer exists.', code: 'not-found');
+      }
+      final allowed = byStore
+          ? order.status.canBeCancelledByStore
+          : order.status.canBeCancelledByCustomer;
+      if (!allowed) throw _changedElsewhere;
+
+      final products = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final item in order.items) {
+        products.add(await tx.get(_products.doc(item.productId)));
+      }
+
+      tx.update(ref, OrderModel.statusMap(OrderStatus.cancelled));
+      for (var i = 0; i < order.items.length; i++) {
+        final stock = products[i].data()?['stock'];
+        if (!products[i].exists || stock is! num) continue;
+        tx.update(products[i].reference, {
+          'stock': stock.toInt() + order.items[i].quantity,
+          // Lets the rules link this stock change to the cancelled order.
+          'lastRestockOrderId': orderId,
+        });
+      }
+    });
+  }
+
+  static const Failure _changedElsewhere = Failure(
+    'This order was just updated. Please check its status and try again.',
+    code: 'status-changed',
+  );
 
   Stream<Order?> watchOrder(String id) {
     return _orders.doc(id).snapshots().map((snapshot) {

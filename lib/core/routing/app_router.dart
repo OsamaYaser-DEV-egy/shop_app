@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/admin/presentation/pages/admin_dashboard_page.dart';
+import '../../features/admin/presentation/pages/admin_order_details_page.dart';
+import '../../features/admin/presentation/pages/admin_orders_page.dart';
 import '../../features/admin/presentation/pages/admin_products_page.dart';
 import '../../features/admin/presentation/pages/product_form_page.dart';
 import '../../features/products/presentation/pages/product_details_page.dart';
@@ -133,6 +135,17 @@ abstract final class AppRouter {
           name: RouteNames.adminProductEdit,
           builder: (_, state) =>
               ProductFormPage(productId: state.pathParameters['id']),
+        ),
+        GoRoute(
+          path: RoutePaths.adminOrders,
+          name: RouteNames.adminOrders,
+          builder: (_, __) => const AdminOrdersPage(),
+        ),
+        GoRoute(
+          path: RoutePaths.adminOrderDetails,
+          name: RouteNames.adminOrderDetails,
+          builder: (_, state) =>
+              AdminOrderDetailsPage(orderId: state.pathParameters['id']!),
         ),
       ],
     );

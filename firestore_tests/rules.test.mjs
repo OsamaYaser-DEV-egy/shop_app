@@ -225,6 +225,116 @@ await t('favorite add and remove', async () => {
   await assertFails(setDoc(doc(db, 'users/alice/favorites/zzz'), { productId: 'zzz', addedAt: serverTimestamp() }));
 });
 
+// ---- Order status and cancellation (mirrors OrderRemoteDataSource) ----
+
+const setStatus = (db, id, status, extra = {}) =>
+  updateDoc(doc(db, `orders/${id}`), { status, updatedAt: serverTimestamp(), ...extra });
+
+/// Cancels and restocks like the app. `extra` adds units to the restock.
+function cancelOrder(db, id, { extra = 0, skipRestock = false } = {}) {
+  return runTransaction(db, async (tx) => {
+    const order = (await tx.get(doc(db, `orders/${id}`))).data();
+    const ids = Object.keys(order.items);
+    const snaps = [];
+    for (const pid of ids) snaps.push(await tx.get(doc(db, `products/${pid}`)));
+    tx.update(doc(db, `orders/${id}`), { status: 'cancelled', updatedAt: serverTimestamp() });
+    if (skipRestock) return;
+    ids.forEach((pid, i) => {
+      tx.update(doc(db, `products/${pid}`), {
+        stock: snaps[i].data().stock + order.items[pid].quantity + extra,
+        lastRestockOrderId: id,
+      });
+    });
+  });
+}
+
+async function seedOrder(status = 'pending') {
+  await seed({ a: product('Amp', 20, 5), b: product('Cable', 5, 5) });
+  const id = await placeOrder(alice(), 'alice', [['a', 2], ['b', 1]]);
+  if (status !== 'pending') {
+    await env.withSecurityRulesDisabled((ctx) =>
+      updateDoc(doc(ctx.firestore(), `orders/${id}`), { status }));
+  }
+  return id;
+}
+
+const stockOf = async (id) =>
+  (await getDoc(doc(admin(), `products/${id}`))).data().stock;
+
+console.log('Order status');
+await t('admin moves an order through every step', async () => {
+  const id = await seedOrder();
+  for (const s of ['confirmed', 'preparing', 'shipped', 'delivered']) {
+    await assertSucceeds(setStatus(admin(), id, s));
+  }
+});
+await t('admin cannot skip a step or go back', async () => {
+  const id = await seedOrder();
+  await assertFails(setStatus(admin(), id, 'shipped'));
+  await assertSucceeds(setStatus(admin(), id, 'confirmed'));
+  await assertFails(setStatus(admin(), id, 'pending'));
+});
+await t('admin cannot change anything but the status', async () => {
+  const id = await seedOrder();
+  await assertFails(setStatus(admin(), id, 'confirmed', { totalPrice: 1 }));
+});
+await t('customers cannot advance their own order', async () => {
+  const id = await seedOrder();
+  await assertFails(setStatus(alice(), id, 'confirmed'));
+});
+await t('admin can list all orders', async () => {
+  await seedOrder();
+  await assertSucceeds(getDocs(collection(admin(), 'orders')));
+});
+await t('nobody can delete an order', async () => {
+  const id = await seedOrder();
+  await assertFails(deleteDoc(doc(admin(), `orders/${id}`)));
+});
+
+console.log('Cancellation');
+await t('customer cancels a pending order and stock returns', async () => {
+  const id = await seedOrder();
+  await assertSucceeds(cancelOrder(alice(), id));
+  if ((await stockOf('a')) !== 5 || (await stockOf('b')) !== 5) throw new Error('stock not restored');
+});
+await t('customer cannot cancel a confirmed order', async () => {
+  const id = await seedOrder('confirmed');
+  await assertFails(cancelOrder(alice(), id));
+});
+await t("another customer cannot cancel someone's order", async () => {
+  const id = await seedOrder();
+  await assertFails(cancelOrder(bob(), id));
+});
+await t('admin cancels a preparing order and stock returns', async () => {
+  const id = await seedOrder('preparing');
+  await assertSucceeds(cancelOrder(admin(), id));
+  if ((await stockOf('a')) !== 5) throw new Error('stock not restored');
+});
+await t('shipped and delivered orders cannot be cancelled', async () => {
+  for (const s of ['shipped', 'delivered']) {
+    const id = await seedOrder(s);
+    await assertFails(cancelOrder(admin(), id));
+  }
+});
+await t('restocking more than the order held is denied', async () => {
+  const id = await seedOrder();
+  await assertFails(cancelOrder(alice(), id, { extra: 10 }));
+});
+await t('restocking again after cancelling is denied', async () => {
+  const id = await seedOrder();
+  await cancelOrder(alice(), id);
+  await assertFails(updateDoc(doc(alice(), 'products/a'), { stock: 7, lastRestockOrderId: id }));
+});
+await t('restocking without cancelling is denied', async () => {
+  const id = await seedOrder();
+  await assertFails(updateDoc(doc(alice(), 'products/a'), { stock: 5, lastRestockOrderId: id }));
+});
+await t('admin can still edit a restocked product', async () => {
+  const id = await seedOrder();
+  await cancelOrder(alice(), id);
+  await assertSucceeds(updateDoc(doc(admin(), 'products/a'), { price: 30, updatedAt: serverTimestamp() }));
+});
+
 await env.cleanup();
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

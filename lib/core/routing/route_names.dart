@@ -18,6 +18,8 @@ abstract final class RouteNames {
   static const String adminProducts = 'admin-products';
   static const String adminProductNew = 'admin-product-new';
   static const String adminProductEdit = 'admin-product-edit';
+  static const String adminOrders = 'admin-orders';
+  static const String adminOrderDetails = 'admin-order-details';
 }
 
 abstract final class RoutePaths {
@@ -44,6 +46,8 @@ abstract final class RoutePaths {
   static const String adminProducts = '/admin/products';
   static const String adminProductNew = '/admin/products/new';
   static const String adminProductEdit = '/admin/products/:id/edit';
+  static const String adminOrders = '/admin/orders';
+  static const String adminOrderDetails = '/admin/orders/:id';
 
   /// Pages a signed-out user may open.
   static const Set<String> public = {login, register, forgotPassword};

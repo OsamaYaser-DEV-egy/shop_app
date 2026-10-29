@@ -3,17 +3,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
+import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../../core/widgets/empty_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../domain/entities/order.dart';
+import '../cubit/order_actions_cubit.dart';
+import '../cubit/order_actions_state.dart';
 import '../cubit/order_details_cubit.dart';
 import '../cubit/order_details_state.dart';
-import '../widgets/order_status_chip.dart';
+import '../widgets/order_actions_listener.dart';
+import '../widgets/order_details_view.dart';
 
-/// One order with its items at purchase time and delivery details. Updates
-/// live when the store changes the status.
+/// Customer view of one order. Updates live when the store changes the
+/// status; a pending order can be cancelled here.
 class OrderDetailsPage extends StatelessWidget {
   const OrderDetailsPage({super.key, required this.orderId});
 
@@ -21,30 +24,42 @@ class OrderDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<OrderDetailsCubit>(param1: orderId),
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Order details')),
-        body: SafeArea(
-          child: BlocBuilder<OrderDetailsCubit, OrderDetailsState>(
-            builder: (context, state) {
-              switch (state.status) {
-                case OrderDetailsStatus.loading:
-                  return const LoadingView();
-                case OrderDetailsStatus.notFound:
-                  return const EmptyView(
-                    icon: Icons.search_off,
-                    title: 'Order not found',
-                  );
-                case OrderDetailsStatus.failure:
-                  return ErrorView(
-                    message: state.message ?? 'Could not load this order.',
-                    onRetry: context.read<OrderDetailsCubit>().retry,
-                  );
-                case OrderDetailsStatus.success:
-                  return _OrderDetailsBody(order: state.order!);
-              }
-            },
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => sl<OrderDetailsCubit>(param1: orderId)),
+        BlocProvider(create: (_) => sl<OrderActionsCubit>()),
+      ],
+      child: OrderActionsListener(
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Order details')),
+          body: SafeArea(
+            child: BlocBuilder<OrderDetailsCubit, OrderDetailsState>(
+              builder: (context, state) {
+                switch (state.status) {
+                  case OrderDetailsStatus.loading:
+                    return const LoadingView();
+                  case OrderDetailsStatus.notFound:
+                    return const EmptyView(
+                      icon: Icons.search_off,
+                      title: 'Order not found',
+                    );
+                  case OrderDetailsStatus.failure:
+                    return ErrorView(
+                      message: state.message ?? 'Could not load this order.',
+                      onRetry: context.read<OrderDetailsCubit>().retry,
+                    );
+                  case OrderDetailsStatus.success:
+                    final order = state.order!;
+                    return OrderDetailsView(
+                      order: order,
+                      actions: [
+                        if (order.status.canBeCancelledByCustomer)
+                          _CancelButton(order: order),
+                      ],
+                    );
+                }
+              },
+            ),
           ),
         ),
       ),
@@ -52,109 +67,33 @@ class OrderDetailsPage extends StatelessWidget {
   }
 }
 
-class _OrderDetailsBody extends StatelessWidget {
-  const _OrderDetailsBody({required this.order});
+class _CancelButton extends StatelessWidget {
+  const _CancelButton({required this.order});
 
   final Order order;
 
+  Future<void> _confirm(BuildContext context) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Cancel this order?',
+      message: 'The store has not confirmed it yet, so you can still cancel.',
+      confirmLabel: 'Cancel order',
+      cancelLabel: 'Keep order',
+      destructive: true,
+    );
+    if (confirmed && context.mounted) {
+      await context.read<OrderActionsCubit>().cancel(order, byStore: false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final createdAt = order.createdAt;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Order ${order.reference}', style: textTheme.titleLarge),
-            ),
-            OrderStatusChip(status: order.status),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          createdAt == null
-              ? 'Placed just now'
-              : 'Placed ${Formatters.dateTime(createdAt)}',
-          style: textTheme.bodySmall,
-        ),
-        const SizedBox(height: 20),
-        Text('Items', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              children: [
-                for (final item in order.items)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.name, style: textTheme.bodyMedium),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${item.quantity} × ${Formatters.price(item.price)}',
-                                style: textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          Formatters.price(item.total),
-                          style: textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                const Divider(height: 20),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text('Total', style: textTheme.titleMedium)),
-                      Text(
-                        Formatters.price(order.totalPrice),
-                        style: textTheme.titleLarge?.copyWith(
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        Text('Delivery', style: textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.location_on_outlined),
-                title: Text(order.shippingAddress),
-              ),
-              ListTile(
-                leading: const Icon(Icons.phone_outlined),
-                title: Text(order.phone),
-              ),
-              const ListTile(
-                leading: Icon(Icons.payments_outlined),
-                title: Text('Cash on delivery'),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return BlocBuilder<OrderActionsCubit, OrderActionsState>(
+      builder: (context, actions) => OutlinedButton.icon(
+        onPressed: actions.isWorking ? null : () => _confirm(context),
+        icon: const Icon(Icons.close, color: AppColors.error),
+        label: const Text('Cancel order'),
+      ),
     );
   }
 }
