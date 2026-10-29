@@ -1,0 +1,16 @@
+/// Firestore collection and field names, defined once to avoid typos.
+abstract final class FirestorePaths {
+  static const String users = 'users';
+  static const String products = 'products';
+  static const String orders = 'orders';
+  static const String notifications = 'notifications';
+  static const String cart = 'cart';
+  static const String favorites = 'favorites';
+}
+
+/// Name of the callable Cloud Function used to place orders (added in Stage 5).
+abstract final class CloudFunctionNames {
+  static const String placeOrder = 'placeOrder';
+  static const String cancelOrder = 'cancelOrder';
+  static const String updateOrderStatus = 'updateOrderStatus';
+}

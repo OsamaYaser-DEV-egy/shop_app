@@ -1,0 +1,233 @@
+rules_version = '2';
+
+// Rules are extended in each stage as collections are introduced.
+//   Stage 2: users
+//   Stage 3: products
+//   Stage 4: users/{uid}/cart and users/{uid}/favorites
+//   Stage 5: orders (created by the app in a transaction, checked here)
+// Everything not matched below is denied by default. The final file is
+// reviewed in the last stage.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // The role is read from the trusted Firestore profile. Roles can only be
+    // changed with the Admin SDK or the Firebase Console, never by a client.
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function validText(value, maxLen) {
+      return value is string && value.size() <= maxLen;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // Self-registration: always a customer, email must match the auth
+      // account, createdAt must be the server time, and no extra fields.
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(
+             ['name', 'email', 'phone', 'address', 'role', 'createdAt'])
+        && request.resource.data.keys().hasAll(
+             ['name', 'email', 'phone', 'address', 'role', 'createdAt'])
+        && request.resource.data.role == 'customer'
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 80
+        && validText(request.resource.data.phone, 20)
+        && validText(request.resource.data.address, 300);
+
+      // Owners may change only name, phone and address. role and email are
+      // immutable from the client.
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'phone', 'address', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 80
+        && validText(request.resource.data.phone, 20)
+        && validText(request.resource.data.address, 300);
+
+      allow delete: if false;
+    }
+
+    function validProduct(d) {
+      return d.keys().hasOnly(
+               ['name', 'description', 'price', 'imageUrl', 'category',
+                'stock', 'isAvailable', 'isFeatured', 'createdAt', 'updatedAt',
+                'lastOrderId'])
+        && d.keys().hasAll(
+               ['name', 'description', 'price', 'imageUrl', 'category',
+                'stock', 'isAvailable'])
+        && d.name is string && d.name.size() >= 2 && d.name.size() <= 120
+        && validText(d.description, 2000)
+        && (d.price is int || d.price is float)
+        && d.price > 0 && d.price <= 1000000
+        && validText(d.imageUrl, 1000)
+        && d.category is string && d.category.size() >= 1 && d.category.size() <= 40
+        && d.stock is int && d.stock >= 0 && d.stock <= 100000
+        && d.isAvailable is bool
+        && (!('isFeatured' in d) || d.isFeatured is bool)
+        && (!('lastOrderId' in d) || d.lastOrderId is string);
+    }
+
+    // Placing an order may lower a product's stock by exactly the quantity
+    // ordered, and change nothing else. The order must be created in the
+    // same transaction (its createdAt is this request's time) by this user.
+    function isStockReservation(productId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isSignedIn()
+        && after.diff(before).affectedKeys().hasOnly(['stock', 'lastOrderId'])
+        && after.lastOrderId is string
+        && before.isAvailable == true
+        && after.stock is int
+        && after.stock >= 0
+        && reservedByOrder(after.lastOrderId, productId,
+                           before.stock - after.stock);
+    }
+
+    function reservedByOrder(orderId, productId, quantity) {
+      let order =
+        getAfter(/databases/$(database)/documents/orders/$(orderId)).data;
+      return order.userId == request.auth.uid
+        && order.createdAt == request.time
+        && order.items[productId].quantity == quantity;
+    }
+
+    // Any signed-in user can browse. Only admins edit products; customers can
+    // only reserve stock while placing an order (no Cloud Functions on the
+    // Spark plan). The reservation is checked first so customers never pay
+    // for the admin lookup.
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validProduct(request.resource.data);
+      allow update: if isStockReservation(productId)
+        || (isAdmin() && validProduct(request.resource.data));
+      allow delete: if isAdmin();
+    }
+
+    function productExists(productId) {
+      return exists(/databases/$(database)/documents/products/$(productId));
+    }
+
+    // One document per product (id = productId), holding only the product id
+    // and quantity. Prices and stock are always read from the product, and
+    // are checked again when the order is placed, so a client cannot change
+    // what it will be charged.
+    match /users/{uid}/cart/{productId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(
+             ['productId', 'quantity', 'updatedAt'])
+        && request.resource.data.keys().hasAll(
+             ['productId', 'quantity', 'updatedAt'])
+        && request.resource.data.productId == productId
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 1
+        && request.resource.data.quantity <= 99
+        && request.resource.data.updatedAt == request.time
+        && productExists(productId);
+    }
+
+    // The document id is the product id; the document holds productId and
+    // addedAt.
+    match /users/{uid}/favorites/{productId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['productId', 'addedAt'])
+        && request.resource.data.keys().hasAll(['productId', 'addedAt'])
+        && request.resource.data.productId == productId
+        && request.resource.data.addedAt == request.time
+        && productExists(productId);
+    }
+
+    // An order item must copy the product's current name and price, and the
+    // product must have been updated by this same order (lastOrderId), which
+    // isStockReservation ties to the item quantity.
+    // Kept short on purpose: a request may evaluate at most 1000 rule
+    // expressions, and every item of the order is checked here. The quantity
+    // is also tied to the stock change by reservedByOrder.
+    function validOrderItem(orderId, item, product) {
+      return item.size() == 3
+        && item.keys().hasAll(['name', 'price', 'quantity'])
+        && item.quantity > 0
+        && item.name == product.name
+        && item.price == product.price
+        && product.lastOrderId == orderId;
+    }
+
+    // Rules cannot loop, so the items are checked by position. 8 items is
+    // the most that fits in the 1000-expression budget of one request
+    // (tested in the emulator); OrderRequest.maxDistinctProducts matches.
+    function itemOk(orderId, items, keys, i) {
+      return i >= keys.size()
+        || validOrderItem(orderId, items[keys[i]],
+             getAfter(/databases/$(database)/documents/products/$(keys[i])).data);
+    }
+
+    function lineTotal(items, keys, i) {
+      return i < keys.size() ? items[keys[i]].price * items[keys[i]].quantity : 0;
+    }
+
+    function itemsTotal(items, keys) {
+      return lineTotal(items, keys, 0) + lineTotal(items, keys, 1)
+        + lineTotal(items, keys, 2) + lineTotal(items, keys, 3)
+        + lineTotal(items, keys, 4) + lineTotal(items, keys, 5)
+        + lineTotal(items, keys, 6) + lineTotal(items, keys, 7);
+    }
+
+    function validNewOrder(orderId, d) {
+      let keys = d.items.keys();
+      return d.size() == 11
+        && d.keys().hasAll(['userId', 'customerName', 'customerEmail', 'items',
+             'totalPrice', 'shippingAddress', 'phone', 'paymentMethod',
+             'status', 'createdAt', 'updatedAt'])
+        && d.userId == request.auth.uid
+        && d.customerEmail == request.auth.token.email
+        && d.customerName is string
+        && d.customerName.size() >= 2
+        && d.customerName.size() <= 80
+        && d.shippingAddress is string
+        && d.shippingAddress.size() >= 8
+        && d.shippingAddress.size() <= 300
+        && d.phone is string
+        && d.phone.size() >= 7
+        && d.phone.size() <= 20
+        && d.paymentMethod == 'cash_on_delivery'
+        && d.status == 'pending'
+        && d.createdAt == request.time
+        && d.updatedAt == request.time
+        && keys.size() >= 1
+        && keys.size() <= 8
+        && itemOk(orderId, d.items, keys, 0) && itemOk(orderId, d.items, keys, 1)
+        && itemOk(orderId, d.items, keys, 2) && itemOk(orderId, d.items, keys, 3)
+        && itemOk(orderId, d.items, keys, 4) && itemOk(orderId, d.items, keys, 5)
+        && itemOk(orderId, d.items, keys, 6) && itemOk(orderId, d.items, keys, 7)
+        && (d.totalPrice is int || d.totalPrice is float)
+        && math.abs(d.totalPrice - itemsTotal(d.items, keys)) < 0.01;
+    }
+
+    // Customers read only their own orders. Orders are created pending by
+    // their owner and are immutable for now; status changes and
+    // cancellations come with the admin order stage.
+    match /orders/{orderId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && validNewOrder(orderId, request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}
